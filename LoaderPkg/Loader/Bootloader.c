@@ -113,7 +113,37 @@ InitGraphics (
   //
   // Hint: Use GetMode/SetMode functions.
   //
+  // STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE ModeNumber;
 
+  // UINTN *SizeOfInfo;
+  // EFI_GRAPHICS_OUTPUT_MODE_INFORMATION **Info;
+
+  // EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
+  // UINTN SizeOfInfo; 
+  // UINTN NumModes, NativeMode;
+
+  // Status = GraphicsOutput->QueryMode (
+  //   GraphicsOutput,
+  //   GraphicsOutput->Mode->Mode,
+  //   &SizeOfInfo,
+  //   &Info
+  // );
+
+  // NativeMode = GraphicsOutput->Mode->Mode;
+  // NumModes = GraphicsOutput->Mode->MaxMode;
+  // // DEBUG ((DEBUG_ERROR, "Native %03d MaxMode %03d\n", NativeMode, NumModes));
+  // PrintFmt("Native %03d MaxMode %03d", NativeMode, NumModes);
+
+  // Set current mode of output, MaxMode: GraphicsOutput->Mode->MaxMode - 1
+  Status = GraphicsOutput->SetMode (
+    GraphicsOutput,
+    4
+  );
+
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "JOS: Cannot set up Graphics Output Mode - %r\n", Status));
+    return Status;
+  }
 
   //
   // Fill screen with black.
@@ -977,15 +1007,15 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
-  volatile BOOLEAN   Connected;
-  DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
+// #if 1 ///< Uncomment to await debugging
+//   volatile BOOLEAN   Connected;
+//   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
-  Connected = FALSE;
-  while (!Connected) {
-    ;
-  }
-#endif
+//   Connected = FALSE;
+//   while (!Connected) {
+//     ;
+//   }
+// #endif
 
   Status = gRT->GetTime (&Now, NULL);
   if (EFI_ERROR (Status)) {
