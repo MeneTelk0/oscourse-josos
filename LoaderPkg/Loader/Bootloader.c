@@ -115,35 +115,41 @@ InitGraphics (
   //
   // STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE ModeNumber;
 
-  // UINTN *SizeOfInfo;
-  // EFI_GRAPHICS_OUTPUT_MODE_INFORMATION **Info;
+  UINT32 ScreenWidth = 960U, ScreenHeight = 640U, MaxModId = -1U;
+  for (UINT32 i = 0; i < GraphicsOutput->Mode->MaxMode; i++) {
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *ModeInfo;
+    UINTN SizeOfInfo;
 
-  // EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
-  // UINTN SizeOfInfo; 
-  // UINTN NumModes, NativeMode;
+    Status = GraphicsOutput->QueryMode(GraphicsOutput, i, &SizeOfInfo, &ModeInfo);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_WARN, "JOS: Cannot query graphics mode - %r\n", Status));
+      break;
+    }
 
-  // Status = GraphicsOutput->QueryMode (
-  //   GraphicsOutput,
-  //   GraphicsOutput->Mode->Mode,
-  //   &SizeOfInfo,
-  //   &Info
-  // );
-
-  // NativeMode = GraphicsOutput->Mode->Mode;
-  // NumModes = GraphicsOutput->Mode->MaxMode;
-  // // DEBUG ((DEBUG_ERROR, "Native %03d MaxMode %03d\n", NativeMode, NumModes));
-  // PrintFmt("Native %03d MaxMode %03d", NativeMode, NumModes);
+    if (ModeInfo->HorizontalResolution == ScreenWidth &&
+        ModeInfo->VerticalResolution == ScreenHeight &&
+        ModeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
+      MaxModId = i;
+      break;
+    }
+  }
 
   // Set current mode of output, MaxMode: GraphicsOutput->Mode->MaxMode - 1
-  Status = GraphicsOutput->SetMode (
-    GraphicsOutput,
-    4
-  );
-
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "JOS: Cannot set up Graphics Output Mode - %r\n", Status));
-    return Status;
+  if (MaxModId != -1U) {
+    Status = GraphicsOutput->SetMode (GraphicsOutput, MaxModId);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "JOS: Cannot set up Graphics Output Mode - %r\n", Status));
+      return Status;
+    }
+  } else {
+    DEBUG ((DEBUG_WARN, "JOS: Cannot find graphics mode. Using default\n"));
   }
+
+  // Status = GraphicsOutput->SetMode (GraphicsOutput, 4);
+  // if (EFI_ERROR (Status)) {
+  //   DEBUG ((DEBUG_ERROR, "JOS: Cannot set up Graphics Output Mode - %r\n", Status));
+  //   return Status;
+  // }
 
   //
   // Fill screen with black.
