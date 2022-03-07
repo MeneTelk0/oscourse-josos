@@ -115,7 +115,7 @@ InitGraphics (
   //
   // STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE ModeNumber;
 
-  UINT32 ScreenWidth = 960U, ScreenHeight = 640U, MaxModId = -1U;
+  UINT32 ScreenWidth = 960U, ScreenHeight = 640U, ModId = -1U;
   for (UINT32 i = 0; i < GraphicsOutput->Mode->MaxMode; i++) {
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *ModeInfo;
     UINTN SizeOfInfo;
@@ -129,14 +129,14 @@ InitGraphics (
     if (ModeInfo->HorizontalResolution == ScreenWidth &&
         ModeInfo->VerticalResolution == ScreenHeight &&
         ModeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
-      MaxModId = i;
+      ModId = i;
       break;
     }
   }
 
   // Set current mode of output, MaxMode: GraphicsOutput->Mode->MaxMode - 1
-  if (MaxModId != -1U) {
-    Status = GraphicsOutput->SetMode (GraphicsOutput, MaxModId);
+  if (ModId != -1U) {
+    Status = GraphicsOutput->SetMode (GraphicsOutput, ModId);
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "JOS: Cannot set up Graphics Output Mode - %r\n", Status));
       return Status;
