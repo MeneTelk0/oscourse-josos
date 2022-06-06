@@ -83,6 +83,10 @@ list_init(struct List *list) {
 inline static void __attribute__((always_inline))
 list_append(struct List *list, struct List *new) {
     // LAB 6: Your code here
+    new->next = list->next;
+    new->prev = list;
+    list->next->prev = new;
+    list->next = new;
 }
 
 /*
@@ -92,6 +96,10 @@ list_append(struct List *list, struct List *new) {
 inline static struct List *__attribute__((always_inline))
 list_del(struct List *list) {
     // LAB 6: Your code here.
+
+    list->prev->next = list->next;
+    list->next->prev = list->prev;
+    list_init(list);
 
     return list;
 }
@@ -174,7 +182,22 @@ alloc_child(struct Page *parent, bool right) {
 
     // LAB 6: Your code here
 
-    struct Page *new = NULL;
+    struct Page *new = alloc_descriptor(parent->state);
+
+    new->parent = parent;
+    new->class = parent->class - 1;
+    if (right) {
+        new->addr = parent->addr + (1ULL << (parent->class -1));
+        parent->right = new;
+    }
+    else {
+        new->addr = parent->addr;
+        parent->left = new;
+    }
+    if (parent->refc > 0)
+        new->refc = 1;
+    else
+        new->refc = 0;
 
     return new;
 }
@@ -327,6 +350,16 @@ attach_region(uintptr_t start, uintptr_t end, enum PageState type) {
     end = ROUNDUP(end, CLASS_SIZE(0));
 
     // LAB 6: Your code here
+
+    uintptr_t current_addr = start;
+    while (current_addr < end){
+        class = 0;
+        while (!(CLASS_MASK(class) & current_addr) && (current_addr + CLASS_SIZE(class) <= end))
+            class++;
+        class--;
+        page_lookup(NULL, current_addr, class, type, 1);
+        current_addr += CLASS_SIZE(class);
+    }
 }
 
 /*
@@ -434,10 +467,33 @@ dump_virtual_tree(struct Page *node, int class) {
     // LAB 7: Your code here
 }
 
+struct Page *
+find_page(uintptr_t addr){
+    struct Page *node = &root;
+    while (node->left && node->right) {
+        bool right = addr & CLASS_SIZE(node->class - 1);
+        node = right ? node->right : node->left;
+    }
+    return node;
+}
+
 void
 dump_memory_lists(void) {
     // LAB 6: Your code here
-
+    uintptr_t addr = 0;
+    struct Page * page = find_page(addr);
+    struct Page * next_page = page;
+    while(addr < max_memory_map_addr){
+        addr = addr + CLASS_SIZE(next_page->class);
+        next_page = find_page(addr);
+        if (page->state != next_page->state || addr >= max_memory_map_addr){
+            if (page->state == RESERVED_NODE)
+                cprintf("0x%08lX - 0x%08lX allocated\n", page2pa(page), page2pa(next_page) - 1);
+            else
+                cprintf("0x%08lX - 0x%08lX free\n", page2pa(page), page2pa(next_page) - 1);
+            page = next_page;
+        }
+    }
 }
 
 /*
@@ -533,11 +589,14 @@ detect_memory(void) {
 
     /* Attach first page as reserved memory */
     // LAB 6: Your code here
+    attach_region(0, 4*KB, RESERVED_NODE);
 
     /* Attach kernel and old IO memory
      * (from IOPHYSMEM to the physical address of end label. end points the the
      *  end of kernel executable image.)*/
     // LAB 6: Your code here
+    //io phys mem, old IO memory
+    attach_region(IOPHYSMEM, PADDR(end), RESERVED_NODE);
 
     /* Detech memory via ether UEFI or CMOS */
     if (uefi_lp && uefi_lp->MemoryMap) {
@@ -562,6 +621,7 @@ detect_memory(void) {
             /* Attach memory described by memory map entry described by start
              * of type type*/
             // LAB 6: Your code here
+            attach_region(start->PhysicalStart, max_memory_map_addr, type);
 
 
 
