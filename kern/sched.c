@@ -25,19 +25,24 @@ sched_yield(void) {
      * below to halt the cpu */
 
     // LAB 3: Your code here:
-    int go = NENV - 1;
-    if (curenv) go = curenv - envs;
-    int start_save = go;
-    //cprintf("reach\n");
-    do {
-     go = (go + 1) % NENV;
-     if (envs[go].env_status == ENV_RUNNABLE || (envs[go].env_status == ENV_RUNNING &&
-       go == start_save)) {
-      //cprintf("%d\n", go);
-      env_run(&envs[go]);
-     }
+    int go = curenv ? ENVX(curenv_getid()) : 0;
+    int index = -1;
 
-    } while (go != start_save);
+    for (int i = 0; i < NENV; ++i) {
+        int cur = (i + go) % NENV;
+        if (envs[cur].env_status == ENV_RUNNABLE) {
+            index = cur;
+            break;
+        }
+    }
+
+    if (index >= 0) {
+        env_run(&envs[index]);
+        cprintf("run env1\n");
+    } else if (curenv && curenv->env_status == ENV_RUNNING) {
+        env_run(curenv);
+        cprintf("run curenv\n");
+    }
 
     cprintf("Halt\n");
 

@@ -94,10 +94,12 @@ env_init(void) {
      * (don't forget about rounding) */
     // LAB 8: Your code here
 
+    envs = (struct Env *)kzalloc_region(sizeof(* envs) * NENV);
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
-
+    if (map_region(current_space, UENVS, &kspace, (uintptr_t)envs, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE), PROT_R | PROT_USER_))
+       panic("Cannot map physical region at %p of size %lld", (void *)envs, UENVS_SIZE);
     /* Set up envs array */
 
     // LAB 3: Your code here
@@ -290,32 +292,44 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
-    // struct Elf *elf = (struct Elf*)binary;
-    // struct Proghdr *ph = (struct Proghdr*)(binary + elf->e_phoff);
-    // if (elf->e_magic != ELF_MAGIC) {
-    //     cprintf("Unexpected ELF format\n");
-    //     return -E_INVALID_EXE;
-    // }
-    // for (size_t i = 0; i < elf->e_phnum; i++) {
-    //     if (ph[i].p_type == ELF_PROG_LOAD) {
-    //         size_t filesz = ph[i].p_filesz;
-    //         size_t memsz = ph[i].p_memsz;
-    //         size_t safety_filesize = memsz - filesz;
-    //         if (safety_filesize < 0) {
-    //             cprintf("ph->p_filesz > ph->p_memsz\n");
-    //             return -E_INVALID_EXE;
-    //         } else {
-    //             memcpy((void*)ph[i].p_va, binary + ph[i].p_offset, filesz);
-    //         memset((void*)ph[i].p_va + filesz, 0, safety_filesize);
-    //         }
-    //     }
-    // }
-    // env->env_tf.tf_rip = elf->e_entry;
-    // uintptr_t image_start = 0;
-    // uintptr_t image_end = 0;
-    // bind_functions(env, binary, size, image_start, image_end);
+    struct Elf *elf = (struct Elf*)binary;
+    struct Proghdr *ph = (struct Proghdr*)(binary + elf->e_phoff);
+    if (elf->e_magic != ELF_MAGIC) {
+     cprintf("Unexpected ELF format\n");
+     return -E_INVALID_EXE;
+    }
 
+    //dump_page_table(env->address_space.pml4);
+    switch_address_space(&env->address_space);
+
+    for (size_t i = 0; i < elf->e_phnum; i++) {
+     if (ph[i].p_type == ELF_PROG_LOAD) {
+      void *src = binary + ph[i].p_offset;
+      void *dst = (void *)ph[i].p_va;
+      size_t filesz = ph[i].p_filesz;
+      size_t memsz = ph[i].p_memsz;
+      size_t safety_filesize = memsz - filesz;
+      size_t filesz2 = MIN(ph[i].p_filesz, memsz);
+
+      if (safety_filesize < 0) {
+       cprintf("ph->p_filesz > ph->p_memsz\n");
+       return -E_INVALID_EXE;
+      } else {
+        map_region(&env->address_space, ROUNDDOWN((uintptr_t)dst, PAGE_SIZE), NULL, 0, ROUNDUP((uintptr_t)dst + memsz, PAGE_SIZE) - ROUNDDOWN((uintptr_t)dst, PAGE_SIZE), PROT_RWX | PROT_USER_ | ALLOC_ZERO); 
+        memcpy(dst, src, filesz2);
+        memset((void*)ph[i].p_va + filesz2, 0, safety_filesize);
+      }
+     }
+    }
+    switch_address_space(&kspace);
+    env->env_tf.tf_rip = elf->e_entry;
+    uintptr_t image_start = 0;
+    uintptr_t image_end = 0;
+    bind_functions(env, binary, size, image_start, image_end);
+ 
     // LAB 8: Your code here
+    map_region(&env->address_space, USER_STACK_TOP - USER_STACK_SIZE, NULL, 0, USER_STACK_SIZE, PROT_RWX | PROT_USER_ | ALLOC_ZERO); 
+
     return 0;
 }
 
@@ -329,13 +343,12 @@ void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 8: Your code here
     // LAB 3: Your code here
-    struct Env *result = NULL;
-    if (env_alloc(&result, 0, type) != 0) {
-        panic("Cannot allocate a new env");
+    struct Env *new_env;
+    if (env_alloc(&new_env, 0, type) < 0) {
+     panic("No free environment\n");
     }
-    if (load_icode(result, binary, size) != 0) {
-        panic("Cannot load env");
-    }
+    new_env->binary = binary;
+    load_icode(new_env, binary, size);
 }
 
 
@@ -375,12 +388,19 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
-    // env->env_status = ENV_DYING;
-    // if (env == curenv) {
-    //     env_free(env);
-    //     sched_yield();
-    // }
+    env->env_status = ENV_DYING;
+    if (env == curenv) {
+        env_free(env);
+        sched_yield();
+    }
+
     // LAB 8: Your code here (set in_page_fault = 0)
+    if (env->env_tf.tf_trapno == T_PGFLT) {
+        assert(current_space);
+        assert(!in_page_fault);
+        cprintf("in_page_fault\n");
+        in_page_fault = 0;
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -465,17 +485,19 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
-    // if (curenv) {
-    //     if (curenv->env_status == ENV_RUNNING) {
-    //         curenv->env_status = ENV_RUNNABLE;
-    //     }
-    //  // what is about DYING?
-    // }
-    // curenv = env;
-    // curenv->env_status = ENV_RUNNING;
-    // curenv->env_runs += 1;
-    // env_pop_tf(&curenv->env_tf);
     // LAB 8: Your code here
 
-    while (1) {}
+    if (curenv) {
+     if (curenv->env_status == ENV_RUNNING) {
+      curenv->env_status = ENV_RUNNABLE;
+     }
+     // what is about DYING?
+    }
+    curenv = env;
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs += 1;
+    switch_address_space(&(curenv->address_space));
+    env_pop_tf(&curenv->env_tf);
+
+    while(1) {}
 }

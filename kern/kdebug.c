@@ -55,6 +55,18 @@ load_user_dwarf_info(struct Dwarf_Addrs *addrs) {
 
     /* Load debug sections from curenv->binary elf image */
     // LAB 8: Your code here
+    struct Elf* user_elf = (struct Elf*)(binary);
+    struct Secthdr* sect_hdr = (struct Secthdr*)(binary + user_elf->e_shoff);
+    const char* sh_str = (char *)(binary + sect_hdr[user_elf->e_shstrndx].sh_offset);
+    for (size_t i = 0; i < user_elf->e_shnum; ++i) {
+        for (size_t j = 0; j < sizeof(sections) / sizeof(*sections); ++j) {
+            if (!strcmp(&sh_str[sect_hdr[i].sh_name], sections[j].name)) {
+                *sections[j].start = binary + sect_hdr[i].sh_offset;
+                *sections[j].end = binary + sect_hdr[i].sh_offset + sect_hdr[i].sh_size;
+            }
+        }
+   }
+
 }
 
 #define UNKNOWN       "<unknown>"
@@ -82,6 +94,8 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     * Make sure that you fully understand why it is necessary. */
     // LAB 8: Your code here
 
+    struct AddressSpace* old_current = switch_address_space(&kspace);
+
     /* Load dwarf section pointers from either
      * currently running program binary or use
      * kernel debug info provided by bootloader
@@ -90,7 +104,13 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     // LAB 8: Your code here:
 
     struct Dwarf_Addrs addrs;
-    load_kernel_dwarf_info(&addrs);
+    if (addr < MAX_USER_READABLE) {
+        load_user_dwarf_info(&addrs);
+    } else {
+        load_kernel_dwarf_info(&addrs);
+    }
+
+    switch_address_space(old_current);
 
     Dwarf_Off offset = 0, line_offset = 0;
     int res = info_by_address(&addrs, addr, &offset);
@@ -105,10 +125,11 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     * Hint: note that we need the address of `call` instruction, but rip holds
     * address of the next instruction, so we should substract 5 from it.
     * Hint: use line_for_address from kern/dwarf_lines.c */
-
+    int lineno_store = 0;
+    res = line_for_address(&addrs, addr - 5, line_offset, &lineno_store);
+    if (res < 0) goto error;
+    info->rip_line = lineno_store;
     // LAB 2: Your res here:
-    addr -= CALL_INSN_LEN;
-    res = line_for_address(&addrs, addr, line_offset, &info->rip_line);
 
     /* Find function name corresponding to given address.
     * Hint: note that we need the address of `call` instruction, but rip holds
@@ -118,9 +139,13 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     * string returned by function_by_info will always be */
 
     // LAB 2: Your res here:
-    res = function_by_info(&addrs, addr, offset, &tmp_buf, &info->rip_fn_addr);
-    strncpy(info->rip_fn_name, tmp_buf, 256);
-    info->rip_fn_namelen = strnlen(info->rip_fn_name, 256);
+    char *tmp_buf_function = NULL;
+    res = function_by_info(&addrs, addr - 5, offset, &tmp_buf_function, &info->rip_fn_addr);
+    if (res < 0) goto error;
+    strncpy(info->rip_fn_name, tmp_buf_function, sizeof(info->rip_fn_name));
+    info->rip_fn_namelen = strnlen(info->rip_fn_name, sizeof(info->rip_fn_name));
+
+    return 0;
 
 error:
     return res;
