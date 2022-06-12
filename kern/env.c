@@ -88,6 +88,15 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
  */
 void
 env_init(void) {
+    /* kzalloc_region only works with current_space != NULL */
+
+    /* Allocate envs array with kzalloc_region
+     * (don't forget about rounding) */
+    // LAB 8: Your code here
+
+    /* Map envs to UENVS read-only,
+     * but user-accessible (with PROT_USER_ set) */
+    // LAB 8: Your code here
 
     /* Set up envs array */
 
@@ -116,6 +125,10 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     struct Env *env;
     if (!(env = env_free_list))
         return -E_NO_FREE_ENV;
+
+    /* Allocate and set up the page directory for this environment. */
+    int res = init_address_space(&env->address_space);
+    if (res < 0) return res;
 
     /* Generate an env_id for this environment */
     int32_t generation = (env->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
@@ -256,11 +269,19 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
  *   'binary + ph->p_offset', should be copied to address
  *   ph->p_va.  Any remaining memory bytes should be cleared to zero.
  *   (The ELF header should have ph->p_filesz <= ph->p_memsz.)
+ *   Use functions from the previous labs to allocate and map pages.
  *
  *   All page protection bits should be user read/write for now.
  *   ELF segments are not necessarily page-aligned, but you can
  *   assume for this function that no two segments will touch
  *   the same page.
+ *
+ *   You may find a function like map_region useful.
+ *
+ *   Loading the segments is much simpler if you can move data
+ *   directly into the virtual addresses stored in the ELF binary.
+ *   So which page directory should be in force during
+ *   this function?
  *
  *   You must also do something with the program's entry point,
  *   to make sure that the environment starts executing there.
@@ -269,31 +290,32 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
 
-    struct Elf *elf = (struct Elf*)binary;
-    struct Proghdr *ph = (struct Proghdr*)(binary + elf->e_phoff);
-    if (elf->e_magic != ELF_MAGIC) {
-        cprintf("Unexpected ELF format\n");
-        return -E_INVALID_EXE;
-    }
-    for (size_t i = 0; i < elf->e_phnum; i++) {
-        if (ph[i].p_type == ELF_PROG_LOAD) {
-            size_t filesz = ph[i].p_filesz;
-            size_t memsz = ph[i].p_memsz;
-            size_t safety_filesize = memsz - filesz;
-            if (safety_filesize < 0) {
-                cprintf("ph->p_filesz > ph->p_memsz\n");
-                return -E_INVALID_EXE;
-            } else {
-                memcpy((void*)ph[i].p_va, binary + ph[i].p_offset, filesz);
-            memset((void*)ph[i].p_va + filesz, 0, safety_filesize);
-            }
-        }
-    }
-    env->env_tf.tf_rip = elf->e_entry;
-    uintptr_t image_start = 0;
-    uintptr_t image_end = 0;
-    bind_functions(env, binary, size, image_start, image_end);
+    // struct Elf *elf = (struct Elf*)binary;
+    // struct Proghdr *ph = (struct Proghdr*)(binary + elf->e_phoff);
+    // if (elf->e_magic != ELF_MAGIC) {
+    //     cprintf("Unexpected ELF format\n");
+    //     return -E_INVALID_EXE;
+    // }
+    // for (size_t i = 0; i < elf->e_phnum; i++) {
+    //     if (ph[i].p_type == ELF_PROG_LOAD) {
+    //         size_t filesz = ph[i].p_filesz;
+    //         size_t memsz = ph[i].p_memsz;
+    //         size_t safety_filesize = memsz - filesz;
+    //         if (safety_filesize < 0) {
+    //             cprintf("ph->p_filesz > ph->p_memsz\n");
+    //             return -E_INVALID_EXE;
+    //         } else {
+    //             memcpy((void*)ph[i].p_va, binary + ph[i].p_offset, filesz);
+    //         memset((void*)ph[i].p_va + filesz, 0, safety_filesize);
+    //         }
+    //     }
+    // }
+    // env->env_tf.tf_rip = elf->e_entry;
+    // uintptr_t image_start = 0;
+    // uintptr_t image_end = 0;
+    // bind_functions(env, binary, size, image_start, image_end);
 
+    // LAB 8: Your code here
     return 0;
 }
 
@@ -305,6 +327,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
  */
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
+    // LAB 8: Your code here
     // LAB 3: Your code here
     struct Env *result = NULL;
     if (env_alloc(&result, 0, type) != 0) {
@@ -322,6 +345,17 @@ env_free(struct Env *env) {
 
     /* Note the environment's demise. */
     if (trace_envs) cprintf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, env->env_id);
+
+#ifndef CONFIG_KSPACE
+    /* If freeing the current environment, switch to kern_pgdir
+     * before freeing the page directory, just in case the page
+     * gets reused. */
+    if (&env->address_space == current_space)
+        switch_address_space(&kspace);
+
+    static_assert(MAX_USER_ADDRESS % HUGE_PAGE_SIZE == 0, "Misaligned MAX_USER_ADDRESS");
+    release_address_space(&env->address_space);
+#endif
 
     /* Return the environment to the free list */
     env->env_status = ENV_FREE;
@@ -341,11 +375,12 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
-    env->env_status = ENV_DYING;
-    if (env == curenv) {
-        env_free(env);
-        sched_yield();
-    }
+    // env->env_status = ENV_DYING;
+    // if (env == curenv) {
+    //     env_free(env);
+    //     sched_yield();
+    // }
+    // LAB 8: Your code here (set in_page_fault = 0)
 }
 
 #ifdef CONFIG_KSPACE
@@ -407,6 +442,7 @@ env_pop_tf(struct Trapframe *tf) {
  *       2. Set 'curenv' to the new environment,
  *       3. Set its status to ENV_RUNNING,
  *       4. Update its 'env_runs' counter,
+ *       5. Use switch_address_space() to switch to its address space.
  * Step 2: Use env_pop_tf() to restore the environment's
  *       registers and starting execution of process.
 
@@ -429,16 +465,17 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
-    if (curenv) {
-        if (curenv->env_status == ENV_RUNNING) {
-            curenv->env_status = ENV_RUNNABLE;
-        }
-     // what is about DYING?
-    }
-    curenv = env;
-    curenv->env_status = ENV_RUNNING;
-    curenv->env_runs += 1;
-    env_pop_tf(&curenv->env_tf);
+    // if (curenv) {
+    //     if (curenv->env_status == ENV_RUNNING) {
+    //         curenv->env_status = ENV_RUNNABLE;
+    //     }
+    //  // what is about DYING?
+    // }
+    // curenv = env;
+    // curenv->env_status = ENV_RUNNING;
+    // curenv->env_runs += 1;
+    // env_pop_tf(&curenv->env_tf);
+    // LAB 8: Your code here
 
     while (1) {}
 }
