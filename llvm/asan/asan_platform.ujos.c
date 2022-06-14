@@ -65,6 +65,7 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
+    cprintf("hello\n");
     return 0;
 }
 #endif
