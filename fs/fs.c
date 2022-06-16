@@ -140,7 +140,7 @@ file_block_walk(struct File *f, blockno_t filebno, blockno_t **ppdiskbno, bool a
     if (filebno >= NDIRECT + NINDIRECT) return -E_INVAL;
 
     if (filebno < NDIRECT) {
-        *ppdiskbno = &f->f_direct[filebno];
+        *ppdiskbno = f->f_direct + filebno;
         return 0;
     }
 
@@ -179,7 +179,7 @@ file_get_block(struct File *f, uint32_t filebno, char **blk) {
         if ((new_block = alloc_block()) < 0) {
           return -E_NO_DISK;
         }
-        cprintf("file_get_block\n");
+        // cprintf("file_get_block\n");
         *pdiskbno = new_block;
     }
 
