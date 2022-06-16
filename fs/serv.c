@@ -204,6 +204,10 @@ serve_read(envid_t envid, union Fsipc *ipc) {
       return r;
     }
 
+    if (req->req_n > PAGE_SIZE) {
+        req->req_n = PAGE_SIZE;
+    }
+
     int count = file_read(o->o_file, ret->ret_buf, req->req_n, o->o_fd->fd_offset);
     if (count > 0) {
         o->o_fd->fd_offset += count;
