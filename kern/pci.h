@@ -4,7 +4,10 @@
 #include <inc/types.h>
 
 // PCI subsystem interface
-enum { pci_res_bus, pci_res_mem, pci_res_io, pci_res_max };
+enum { pci_res_bus,
+       pci_res_mem,
+       pci_res_io,
+       pci_res_max };
 
 struct pci_bus;
 
@@ -27,7 +30,7 @@ struct pci_bus {
     uint32_t busno;
 };
 
-int  pci_init(void);
+int pci_init(void);
 void pci_func_enable(struct pci_func *f);
 
 #endif

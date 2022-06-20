@@ -74,6 +74,15 @@ extern char pfstacktop[], pfstack[];
 #define assert_physical(n) ({ if (trace_memory_more) _assert_root(__FILE__, __LINE__, n, 1); assert(((n)->state & NODE_TYPE_MASK) >= PARTIAL_NODE); })
 #define assert_virtual(n)  ({if (trace_memory_more) _assert_root(__FILE__, __LINE__, n, 0); assert(((n)->state & NODE_TYPE_MASK) < PARTIAL_NODE); })
 
+physaddr_t
+va2pa(uintptr_t va) {
+    pml4e_t *pml4 = kspace.pml4;
+    pdpe_t *pdpe = (pdpe_t *)KADDR(PTE_ADDR(pml4[PML4_INDEX(va)]));
+    pde_t *pde = (pde_t *)KADDR(PTE_ADDR(pdpe[PDP_INDEX(va)]));
+    pte_t *pt = (pte_t *)KADDR(PTE_ADDR(pde[PD_INDEX(va)]));
+    return (physaddr_t)(PTE_ADDR(pt[PT_INDEX(va)]) | PAGE_OFFSET(va));
+}
+
 inline static bool __attribute__((always_inline))
 list_empty(struct List *list) {
     return list->next == list;

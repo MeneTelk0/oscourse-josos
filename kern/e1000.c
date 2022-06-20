@@ -1,124 +1,146 @@
 #include <kern/e1000.h>
 #include <kern/pci.h>
 #include <kern/pmap.h>
-
-#include <inc/stdio.h>
+#include <inc/types.h>
 #include <inc/string.h>
 #include <inc/error.h>
 
 // LAB 6: Your driver code here
 
-// Notes:
-// The hardware always consumes descriptors from the head and moves the head
-// pointer, while the driver always add descriptors to the tail and moves the
-// tail pointer.
-// Transmit:
-// Transmit Descriptor Tail register(TDT) is the register that
-// holds a value which is an offset from the base, and indicates
-// the location beyond the last descriptor hardware can process. This is the
-// location where software writes the first new descriptor. After the software
-// wrote the data. it clears the DD flag to mark this slot as unprocessed.
-// Receive:
-// The software reads a descriptor from the (tail+1)%size and then marks it as
-// free by clearing the DD flag and incrementing the tail pointer
-static volatile uint32_t *nic;
+struct tx_desc tx_desc_table[NU_DESC];
+struct rx_desc rx_desc_table[NU_DESC];
+char tx_buf[NU_DESC][BUFFER_SIZE];
+char rx_buf[NU_DESC][BUFFER_SIZE];
+volatile uint32_t *phy_mmio_addr;
 
-#define NIC_REG(offset) (nic[offset / 4])
-#define TX_QUEUE_SIZE 64
-#define RX_QUEUE_SIZE 128
+int
+e1000_attach(struct pci_func* pciFunction) {
 
-struct eth_packet_buffer
-{
-	char data[DATA_PACKET_BUFFER_SIZE];
-};
+    pci_func_enable(pciFunction);
+    phy_mmio_addr = mmio_map_region(pciFunction->reg_base[0], pciFunction->reg_size[0]);
 
-// transmit buffers
-struct eth_packet_buffer tx_queue_data[TX_QUEUE_SIZE];
-struct e1000_tx_desc *tx_queue_desc;
+    char* base_addr = (char*)phy_mmio_addr;
 
-// receive buffers
-struct eth_packet_buffer rx_queue_data[RX_QUEUE_SIZE];
-struct e1000_rx_desc *rx_queue_desc;
+    //Set the register values
 
-int e1000_attach(struct pci_func *pcif)
-{
-	pci_func_enable(pcif);
-	nic = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
-    
-	// Transmit Initialization
-    void *t_desc = kzalloc_region(TX_QUEUE_SIZE * sizeof(struct e1000_tx_desc));
+    //base adress LOW
+    uint32_t* tdbal = (uint32_t*)(base_addr + E1000_TDBAL);
+    *tdbal = (uint64_t)PADDR(tx_desc_table);
 
-	NIC_REG(E1000_TDBAL) = PADDR(t_desc);
-	NIC_REG(E1000_TDBAH) = 0;
-	NIC_REG(E1000_TDLEN) = TX_QUEUE_SIZE * sizeof(struct e1000_tx_desc);
-	tx_queue_desc = t_desc;
-	for (int i = 0; i < TX_QUEUE_SIZE; i++) {
-		tx_queue_desc[i].addr = (uint64_t)PADDR(&tx_queue_data[i]);
-		// Report Status on, and mark descriptor as end of packet
-		tx_queue_desc[i].cmd = (1 << 3) | (1 << 0);
-		// set Descriptor Done so we can use this descriptor
-		tx_queue_desc[i].status |= E1000_TXD_STAT_DD;
-	}
-	// initialize head and tail to 0 per documentation
-	NIC_REG(E1000_TDH) = 0;
-	NIC_REG(E1000_TDT) = 0;
+    //base address HIGH
+    uint32_t* tdbah = (uint32_t*)(base_addr + E1000_TDBAH);
+    *tdbah = 0;
 
-	// control desc page 311
-	NIC_REG(E1000_TCTL) |= (E1000_TCTL_EN | E1000_TCTL_PSP);
-	NIC_REG(E1000_TCTL) |= E1000_TCTL_COLD & ( 0x40 << 12);  // set the cold
-	NIC_REG(E1000_TIPG) = 10; // page 313
+    //LENGTH
+    uint32_t* tdlen = (uint32_t*)(base_addr + E1000_TDLEN);
+    *tdlen = sizeof(tx_desc_table);
 
-	// Receive initialization
-	// MAC address 52:54:00:12:34:56
-	NIC_REG(E1000_RAL) = 0x12005452;
-	*(uint16_t *)&NIC_REG(E1000_RAH) = 0x5634;
-	NIC_REG(E1000_RAH) |= E1000_RAH_AV; // set the address valid bit
-	// MTA initialized to 0b
-	NIC_REG(E1000_MTA) = 0;
-	// Allocate memory for the receive descriptor list & init registers
-    void *r_desc = kzalloc_region(RX_QUEUE_SIZE * sizeof(struct e1000_tx_desc));
-	rx_queue_desc = r_desc;
-	NIC_REG(E1000_RDBAL) = PADDR(r_desc);
-	NIC_REG(E1000_RDBAH) = 0;
-	NIC_REG(E1000_RDLEN) = RX_QUEUE_SIZE * sizeof(struct e1000_rx_desc);
+    // head
+    uint32_t* tdh = (uint32_t*)(base_addr + E1000_TDH);
+    *tdh = 0;
 
-	// initialize head and tail such that (tail + 1) % size = head
-	NIC_REG(E1000_RDH) = 0;
-	NIC_REG(E1000_RDT) = RX_QUEUE_SIZE - 1;
-	for (int i = 0; i < RX_QUEUE_SIZE; i++) {
-		rx_queue_desc[i].addr = (uint64_t)PADDR(&rx_queue_data[i]);
-		// clear Descriptor Done so we know we are not allowed to read it
-		rx_queue_desc[i].status &= ~E1000_RXD_STAT_DD;
-	}
-	// enable and strip CRC
-	NIC_REG(E1000_RCTL) |= E1000_RCTL_EN | E1000_RCTL_SECRC;
-	return 0;
+    // tail
+    uint32_t* tdt = (uint32_t*)(base_addr + E1000_TDT);
+    *tdt = 0;
+
+    // TCTL (tranmit control) E1000_TCTL_en | E1000_TCTL_psp | E1000_TCTL_ct | E1000_TCTL_cold
+    uint32_t* tctl = (uint32_t*)(base_addr + E1000_TCTL);
+    *tctl = E1000_TCTL_EN | E1000_TCTL_PSP | E1000_TCTL_CT | E1000_TCTL_COLD;
+
+    uint32_t* tipg = (uint32_t*)(base_addr + E1000_TIPG);
+    *tipg = 0x60200a;
+
+    int i;
+    for (i = 0; i < NU_DESC; i++) {
+        tx_desc_table[i].status |= 1;
+        tx_desc_table[i].buf_addr = PADDR(tx_buf[i]);
+    }
+
+
+    //Setting up Reciever
+    //LOW
+    uint32_t* rxral = (uint32_t*)(base_addr + E1000_RX_RAL);
+    *rxral = 0x12005452;
+
+    //HIGH
+    uint32_t* rxrah = (uint32_t*)(base_addr + E1000_RX_RAH);
+    *rxrah = 0x80005634;
+
+    //MTA
+    uint32_t* mta = (uint32_t*)(base_addr + E1000_MTA);
+    *mta = 0;
+
+    uint32_t* rdbal = (uint32_t*)(base_addr + E1000_RDBAL);
+    *rdbal = PADDR(rx_desc_table);
+
+    //Length
+    uint32_t* rdlen = (uint32_t*)(base_addr + E1000_RDLEN);
+    *rdlen = sizeof(rx_desc_table);
+
+    //head
+    uint32_t* rdh = (uint32_t*)(base_addr + E1000_RDH);
+    *rdh = 0;
+
+    //tail
+    uint32_t* rdt = (uint32_t*)(base_addr + E1000_RDT);
+    *rdt = 0;
+
+    //RCTL E1000_RCTL_en | E1000_RCTL_bam | E1000_RCTL_crc
+    uint32_t* rctl = (uint32_t*)(base_addr + E1000_RCTL);
+    *rctl = E1000_RCTL_EN | E1000_RCTL_BAM | E1000_RCTL_CRC;
+
+    for (i = 0; i < NU_DESC; i++) {
+        rx_desc_table[i].buf_addr = PADDR(rx_buf[i]);
+    }
+
+    return 1;
 }
 
-int tx_packet(char *buf, int size)
-{
-	assert(size <= ETH_MAX_PACKET_SIZE);
-	int tail_indx = NIC_REG(E1000_TDT);
-	if (!(tx_queue_desc[tail_indx].status & E1000_TXD_STAT_DD)) {
-		return -E_NIC_BUSY; // queue is full
-	}
-	tx_queue_desc[tail_indx].status &= ~E1000_TXD_STAT_DD;
-	memmove(&tx_queue_data[tail_indx].data, buf, size);
-	tx_queue_desc[tail_indx].length = size;
-	// update the TDT to "submit" this packet for transmission
-	NIC_REG(E1000_TDT) = (tail_indx + 1) % TX_QUEUE_SIZE;
-	return 0;
+
+int
+tx_packet(char* buffer, int length) {
+    // free head
+    static int head = 0;
+    uint32_t* free_desc_addr = (uint32_t*)((char*)phy_mmio_addr + E1000_TDT);
+
+    //status to transmit
+    if (!(tx_desc_table[head].status & 0x1)) {
+        cprintf("descriptor is full not able to transmit ");
+        return -1;
+    }
+
+    //data
+    memmove(tx_buf[head], buffer, length);
+    //length
+    tx_desc_table[head].length = length;
+
+    // report status and end of packet
+    tx_desc_table[head].cmd |= (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
+    //next free
+    head = (head + 1) % NU_DESC;
+    *free_desc_addr = head;
+
+    return 0;
 }
 
-int rx_packet(char *buf, int size)
-{
-	int next_indx = (NIC_REG(E1000_RDT) + 1) % RX_QUEUE_SIZE;
-	if (!(rx_queue_desc[next_indx].status & E1000_TXD_STAT_DD)) {
-		return -E_RX_EMPTY; // queue is empty
-	}
-	rx_queue_desc[next_indx].status &= ~E1000_TXD_STAT_DD;
-	int rx_size = MIN(rx_queue_desc[next_indx].length, size);
-	memmove(buf, rx_queue_data[next_indx].data, rx_size);
-	NIC_REG(E1000_RDT) = next_indx;
-	return rx_size;
+int
+rx_packet(char* buffer) {
+    //free head
+    static int head = 0;
+    uint32_t* free_desc_addr = (uint32_t*)((char*)phy_mmio_addr + E1000_RDT);
+    //status to recieve
+    if (!(rx_desc_table[head].status & 0x1)) {
+        //cprintf("no data received");
+        return -1;
+    }
+
+    int len = rx_desc_table[head].length;
+
+    //data
+    memmove(buffer, rx_buf[head], len);
+    rx_desc_table[head].status = 0;
+    head = (head + 1) % NU_DESC;
+    *free_desc_addr = head;
+
+    return len;
 }

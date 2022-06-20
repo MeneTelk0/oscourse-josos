@@ -120,6 +120,8 @@ void *kzalloc_region(size_t size);
 void *mmio_map_region(physaddr_t addr, size_t size);
 void *mmio_remap_last_region(physaddr_t addr, void *oldva, size_t oldsz, size_t size);
 
+physaddr_t va2pa(uintptr_t va);
+
 extern struct AddressSpace kspace;
 extern struct AddressSpace *current_space;
 extern struct Page root;

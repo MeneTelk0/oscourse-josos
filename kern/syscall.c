@@ -13,6 +13,7 @@
 #include <kern/syscall.h>
 #include <kern/trap.h>
 #include <kern/traceopt.h>
+#include <kern/e1000.h>
 
 /* Print a string to the system console.
  * The string is exactly 'len' characters long.
@@ -445,6 +446,30 @@ sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, uintptr_t size2) {
     return max1 - max2;
 }
 
+
+// transmit a packet.
+// returns -E_INVAL if size is bigger than allowed
+// returns -E_NIC_BUSY if transmission queue is full
+static int
+sys_transmit_packet(char *buf, int size)
+{
+	if (size > BUFFER_SIZE) {
+		return -E_INVAL;
+	}
+	user_mem_assert(curenv, buf, size, PTE_U);
+	return tx_packet(buf, size);
+}
+
+// receive a packet. store up to `size` bytes into buffer `buf`
+// returns -E_RX_EMPTY if queue is empty and there is nothing to receive
+// returns the amount of bytes read
+static int
+sys_receive_packet(char *buf, int size)
+{
+	user_mem_assert(curenv, buf, size, PTE_U | PTE_P | PTE_W);
+	return rx_packet(buf);
+}
+
 /* Dispatches to the correct kernel function, passing the arguments. */
 uintptr_t
 syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6) {
@@ -486,7 +511,11 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_ipc_try_send((envid_t) a1, (uint32_t) a2, a3, (size_t) a4, (int) a5);
     } else if (syscallno == SYS_ipc_recv) {
         return sys_ipc_recv(a1, a2);
-    }   
+    } else if (syscallno == SYS_transmit_packet) {
+        return sys_transmit_packet((char *)a1, (int)a2);
+    } else if (syscallno == SYS_receive_packet) {
+        return sys_receive_packet((char *)a1, (int)a2);
+    } 
     // LAB 9: Your code here
     // LAB 11: Your code here
     // LAB 12: Your code here

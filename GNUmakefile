@@ -298,6 +298,11 @@ include user/Makefrag
 include fs/Makefrag
 endif
 
+# net
+PORT7	:= $(shell expr $(GDBPORT) + 1)
+PORT80	:= $(shell expr $(GDBPORT) + 2)
+# net
+
 QEMUOPTS = -hda fat:rw:$(JOS_ESP) -serial mon:stdio -gdb tcp::$(GDBPORT)
 QEMUOPTS += -m 512M -d int,cpu_reset,mmu,pcall -no-reboot
 
@@ -311,6 +316,24 @@ endif
 IMAGES += $(OBJDIR)/fs/fs.img
 QEMUOPTS += -bios $(OVMF_FIRMWARE)
 # QEMUOPTS += -debugcon file:$(UEFIDIR)/debug.log -global isa-debugcon.iobase=0x402
+
+# net
+# QEMUOPTS += -net user -net nic,model=e1000
+QEMUOPTS += -nic socket,mcast=230.0.0.1:1234,model=e1000
+# QEMUOPTS += -net nic,model=e1000 -net dump,file=qemu.pcap
+# QEMUOPTS += -net user -net nic,model=e1000,macaddr=52:54:00:12:34:56
+# QEMUOPTS += -net dump,file=qemu.pcap
+#
+# QEMUOPTS += -netdev user,id=mynet0,hostfwd=tcp::8080-:80
+# QEMUOPTS += -netdev user,id=mynet0,hostfwd=tcp::8080-:80
+# QEMUOPTS += -device e1000,netdev=mynet0
+# QEMUOPTS += -object filter-dump,id=mynet0,netdev=mynet0,file=dump.pcap
+# QEMUOPTS += -netdev tap,id=mynet0,ifname=jostap,script=no,downscript=no
+# QEMUOPTS += -device e1000,netdev=mynet0
+# QEMUOPTS += -object filter-dump,id=mynet0,netdev=mynet0,file=dump.pcap
+# QEMUOPTS += -net user -net nic,model=e1000 -redir tcp:$(PORT7)::7 \
+	-redir tcp:$(PORT80)::80 -redir udp:$(PORT7)::7 -net dump,file=qemu.pcap
+# net
 
 define POST_CHECKOUT
 #!/bin/sh -x
@@ -426,6 +449,10 @@ grade:
 
 # For test runs
 
+# net
+prep-net_%: override INIT_CFLAGS+=-DTEST_NO_NS
+# net
+
 prep-%:
 	$(V)$(MAKE) "INIT_CFLAGS=${INIT_CFLAGS} -DTEST=`case $* in *_*) echo $*;; *) echo user_$*;; esac`" $(IMAGES)
 
@@ -440,6 +467,19 @@ run-%-nox: prep-% pre-qemu
 
 run-%: prep-% pre-qemu
 	$(QEMU) $(QEMUOPTS)
+
+# For network connections
+which-ports:
+	@echo "Local port $(PORT7) forwards to JOS port 7 (echo server)"
+	@echo "Local port $(PORT80) forwards to JOS port 80 (web server)"
+nc-80:
+	nc localhost $(PORT80)
+nc-7:
+	nc localhost $(PORT7)
+telnet-80:
+	telnet localhost $(PORT80)
+telnet-7:
+	telnet localhost $(PORT7)
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,
