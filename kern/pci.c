@@ -1,4 +1,3 @@
-// Sources from here: https://github.com/zeldovich/histar/blob/2394c83b4cf7c989b7232df17e5c3c6cfd56754d/kern/dev/pci.c
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>

@@ -319,13 +319,19 @@ QEMUOPTS += -bios $(OVMF_FIRMWARE)
 
 # net
 # QEMUOPTS += -net user -net nic,model=e1000
-QEMUOPTS += -nic socket,mcast=230.0.0.1:1234,model=e1000
+# QEMUOPTS += -nic socket,mcast=230.0.0.1:1234,model=e1000
+
+QEMUOPTS += -netdev socket,id=mynet0,mcast=230.0.0.1:1234
+# QEMUOPTS += -netdev socket,id=mynet0,listen=:1234
+QEMUOPTS += -device e1000,netdev=mynet0
+QEMUOPTS += -object filter-dump,id=mynet0,netdev=mynet0,file=dump.pcap
+
 # QEMUOPTS += -net nic,model=e1000 -net dump,file=qemu.pcap
 # QEMUOPTS += -net user -net nic,model=e1000,macaddr=52:54:00:12:34:56
 # QEMUOPTS += -net dump,file=qemu.pcap
 #
 # QEMUOPTS += -netdev user,id=mynet0,hostfwd=tcp::8080-:80
-# QEMUOPTS += -netdev user,id=mynet0,hostfwd=tcp::8080-:80
+# QEMUOPTS += -netdev user,id=mynet0,hostfwd=udp::1234-:1234
 # QEMUOPTS += -device e1000,netdev=mynet0
 # QEMUOPTS += -object filter-dump,id=mynet0,netdev=mynet0,file=dump.pcap
 # QEMUOPTS += -netdev tap,id=mynet0,ifname=jostap,script=no,downscript=no

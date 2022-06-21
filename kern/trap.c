@@ -16,6 +16,7 @@
 #include <kern/timer.h>
 #include <kern/vsyscall.h>
 #include <kern/traceopt.h>
+#include <kern/net.h>
 
 static struct Taskstate ts;
 
@@ -303,6 +304,7 @@ trap_dispatch(struct Trapframe *tf) {
         // LAB 5: Your code here
         // LAB 4: Your code here
         // rtc_timer_pic_handle();
+        net_serve();
         timer_for_schedule->handle_interrupts();
         vsys[VSYS_gettime] = gettime();
         sched_yield();

@@ -456,7 +456,7 @@ sys_transmit_packet(char *buf, int size)
 	if (size > BUFFER_SIZE) {
 		return -E_INVAL;
 	}
-	user_mem_assert(curenv, buf, size, PTE_U);
+	// user_mem_assert(curenv, buf, size, PTE_U);
 	return tx_packet(buf, size);
 }
 
@@ -464,9 +464,9 @@ sys_transmit_packet(char *buf, int size)
 // returns -E_RX_EMPTY if queue is empty and there is nothing to receive
 // returns the amount of bytes read
 static int
-sys_receive_packet(char *buf, int size)
+sys_receive_packet(char *buf)
 {
-	user_mem_assert(curenv, buf, size, PTE_U | PTE_P | PTE_W);
+	// user_mem_assert(curenv, buf, size, PTE_U | PTE_P | PTE_W);
 	return rx_packet(buf);
 }
 
@@ -514,7 +514,7 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
     } else if (syscallno == SYS_transmit_packet) {
         return sys_transmit_packet((char *)a1, (int)a2);
     } else if (syscallno == SYS_receive_packet) {
-        return sys_receive_packet((char *)a1, (int)a2);
+        return sys_receive_packet((char *)a1);
     } 
     // LAB 9: Your code here
     // LAB 11: Your code here

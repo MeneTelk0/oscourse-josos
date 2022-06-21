@@ -97,7 +97,7 @@ int sys_gettime(void);
 int vsys_gettime(void);
 
 int     sys_transmit_packet(char *buf, int size);
-int     sys_receive_packet(char *buf, int size);
+int     sys_receive_packet(char *buf);
 
 /* This must be inlined. Exercise for reader: why? */
 static inline envid_t __attribute__((always_inline))

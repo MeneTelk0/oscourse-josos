@@ -57,7 +57,7 @@ e1000_attach(struct pci_func* pciFunction) {
     }
 
 
-    //Setting up Reciever
+    //Setting up Receiver
     //LOW
     uint32_t* rxral = (uint32_t*)(base_addr + E1000_RX_RAL);
     *rxral = 0x12005452;
@@ -128,11 +128,12 @@ rx_packet(char* buffer) {
     //free head
     static int head = 0;
     uint32_t* free_desc_addr = (uint32_t*)((char*)phy_mmio_addr + E1000_RDT);
-    //status to recieve
+    //status to receive
     if (!(rx_desc_table[head].status & 0x1)) {
-        //cprintf("no data received");
+        // cprintf("no data received");
         return -1;
     }
+    cprintf("some data received \n");
 
     int len = rx_desc_table[head].length;
 

@@ -154,6 +154,6 @@ sys_transmit_packet(char *buf, int size){
 }
 
 int
-sys_receive_packet(char *buf, int size){
-	return syscall(SYS_receive_packet, 0, (uintptr_t)buf, (uintptr_t)size, 0, 0, 0, 0);
+sys_receive_packet(char *buf){
+	return syscall(SYS_receive_packet, 0, (uintptr_t)buf, 0, 0, 0, 0, 0);
 }
