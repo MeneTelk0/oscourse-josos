@@ -5,6 +5,7 @@
 #include <kern/eth.h>
 #include <inc/stdio.h>
 #include <kern/udp.h>
+#include <kern/icmp.h>
 
 
 uint16_t packet_id = 0;
@@ -97,6 +98,7 @@ ip_recv(struct eth_pkt* eth_pkt, int length) {
     switch (hdr->ip_protocol){
     case IP_PROTO_ICMP:
         cprintf("IPv4: ICMP protocol \n");
+        icmp_recv(&ip_pkt);
         break;
     case IP_PROTO_UDP:
         cprintf("IPv4: UDP protocol \n");

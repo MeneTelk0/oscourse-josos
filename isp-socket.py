@@ -61,6 +61,13 @@ def create_arp(src_eth_mac, src_mac, psrc, pdst):
     whole_packet = ether / arp
     return scapy.raw(whole_packet)
 
+def create_icmp(src_mac, dst_mac, src_ip, dst_ip, seq_num):
+    ether = scapy.Ether(src=src_mac, dst=dst_mac)
+    ip = scapy.IP(src=src_ip, dst=dst_ip)
+    icmp = scapy.ICMP(id=1, seq=seq_num)
+    whole_packet = ether / ip / icmp
+    return scapy.raw(whole_packet)
+
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind(('0.0.0.0', args.proxy_port))
 server_socket.listen(5)
@@ -110,6 +117,17 @@ try:
                 print("ARP frame: ", arp)
                 err = sock.sendto(arp, (args.mcast_ip, args.mcast_port))
                 print("Message length: ", err)
+
+                for num in range(5):
+                    icmp = create_icmp(
+                        src_mac=args.src_mac,
+                        dst_mac=args.dst_mac,
+                        src_ip=args.src_ip,
+                        dst_ip=args.dst_ip, 
+                        seq_num = num
+                    )
+                    print("ICMP frame: ", icmp)
+                    err = sock.sendto(icmp, (args.mcast_ip, args.mcast_port))
 
         except BlockingIOError:
             pass
