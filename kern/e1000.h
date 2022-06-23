@@ -3,8 +3,8 @@
 
 #include <kern/pci.h>
 
-#define NU_DESC     64
-#define BUFFER_SIZE 1518
+#define NU_DESC     256
+#define BUFFER_SIZE 2048
 
 // Tx Desc structure
 struct tx_desc {
@@ -36,6 +36,7 @@ struct rx_desc {
 #define E1000_TDLEN 0x03808
 #define E1000_TDH   0x03810
 #define E1000_TDT   0x03818
+#define E1000_STATUS   0x00008  /* Device Status - RO */
 
 // Transmit control
 #define E1000_TCTL_EN   0x00000002
@@ -57,12 +58,27 @@ struct rx_desc {
 
 
 // Receive Control
+#define E1000_RCTL_SZ_2048 0x00000000    /* rx buffer size 2048 */
 #define E1000_RCTL_EN  0x00000002
+#define E1000_RCTL_SBP 0x00000004
+#define E1000_RCTL_UPE 0x00000008
+#define E1000_RCTL_MPE 0x00000010
 #define E1000_RCTL_BAM 0x00008000
 #define E1000_RCTL_CRC 0x04000000
 
 #define E1000_RX_RAL 0x05400
 #define E1000_RX_RAH 0x05404
+
+
+// Interrupts and control
+#define E1000_IMS 0x000D0
+#define E1000_CTL 0x00000
+#define E1000_CTL_RST 0x00400000
+
+#define E1000_RDTR 0x02820
+#define E1000_RADV 0x0282C
+
+#define E1000_ICR 0x000C0
 
 // struct tx_desc tx_desc_table[NU_DESC];
 // struct rx_desc rx_desc_table[NU_DESC];

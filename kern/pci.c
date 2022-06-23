@@ -7,7 +7,7 @@
 
 // Flag to do "lspci" at bootup
 #define pci_show_devs  1
-#define pci_show_addrs 0
+#define pci_show_addrs 1
 
 // PCI "configuration mechanism one"
 #define PCI_CONFIGURATION_ADDRESS_PORT (uint32_t)0xCF8

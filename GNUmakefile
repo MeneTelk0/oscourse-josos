@@ -304,7 +304,8 @@ PORT80	:= $(shell expr $(GDBPORT) + 2)
 # net
 
 QEMUOPTS = -hda fat:rw:$(JOS_ESP) -serial mon:stdio -gdb tcp::$(GDBPORT)
-QEMUOPTS += -m 512M -d int,cpu_reset,mmu,pcall -no-reboot
+QEMUOPTS += -m 512M -d strace,guest_errors -no-reboot
+# QEMUOPTS += -m 512M -d int,cpu_reset,mmu,pcall -no-reboot
 
 QEMUOPTS += $(shell if $(QEMU) -display none -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 IMAGES = $(OVMF_FIRMWARE) $(JOS_LOADER) $(OBJDIR)/kern/kernel $(JOS_ESP)/EFI/BOOT/kernel $(JOS_ESP)/EFI/BOOT/$(JOS_BOOTER)
@@ -320,10 +321,9 @@ QEMUOPTS += -bios $(OVMF_FIRMWARE)
 # net
 # QEMUOPTS += -net user -net nic,model=e1000
 # QEMUOPTS += -nic socket,mcast=230.0.0.1:1234,model=e1000
-
+# QEMUOPTS += -monitor stdio
 QEMUOPTS += -netdev socket,id=mynet0,mcast=230.0.0.1:1234
-# QEMUOPTS += -netdev socket,id=mynet0,listen=:1234
-QEMUOPTS += -device e1000,netdev=mynet0
+QEMUOPTS += -device e1000,netdev=mynet0,mac=52:54:00:12:34:56
 QEMUOPTS += -object filter-dump,id=mynet0,netdev=mynet0,file=dump.pcap
 
 # QEMUOPTS += -net nic,model=e1000 -net dump,file=qemu.pcap

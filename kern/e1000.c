@@ -16,12 +16,19 @@ volatile uint32_t *phy_mmio_addr;
 int
 e1000_attach(struct pci_func* pciFunction) {
 
+    cprintf("Attaching E1000 \n");
+
     pci_func_enable(pciFunction);
     phy_mmio_addr = mmio_map_region(pciFunction->reg_base[0], pciFunction->reg_size[0]);
 
     char* base_addr = (char*)phy_mmio_addr;
 
-    //Set the register values
+    //Reset the device
+    // uint32_t* ims = (uint32_t*)(base_addr + E1000_IMS);
+    // *ims = 0; // disable interrupts
+    // uint32_t* ctl = (uint32_t*)(base_addr + E1000_CTL);
+    // *ctl |= E1000_CTL_RST;
+    // *ims = 0; // redisable interrupts
 
     //base adress LOW
     uint32_t* tdbal = (uint32_t*)(base_addr + E1000_TDBAL);
@@ -58,6 +65,11 @@ e1000_attach(struct pci_func* pciFunction) {
 
 
     //Setting up Receiver
+
+    for (i = 0; i < NU_DESC; i++) {
+        rx_desc_table[i].buf_addr = PADDR(rx_buf[i]);
+    }
+
     //LOW
     uint32_t* rxral = (uint32_t*)(base_addr + E1000_RX_RAL);
     *rxral = 0x12005452;
@@ -66,12 +78,21 @@ e1000_attach(struct pci_func* pciFunction) {
     uint32_t* rxrah = (uint32_t*)(base_addr + E1000_RX_RAH);
     *rxrah = 0x80005634;
 
+    // cprintf("mac addr %u:%u", *(uint32_t*)(base_addr+E1000_RX_RAL), *(uint32_t*)(base_addr+E1000_RX_RAH));
+
     //MTA
     uint32_t* mta = (uint32_t*)(base_addr + E1000_MTA);
     *mta = 0;
 
+    //Disable interrupts
+    uint32_t* ims = (uint32_t*)(base_addr + E1000_IMS);
+    *ims = 0;
+
     uint32_t* rdbal = (uint32_t*)(base_addr + E1000_RDBAL);
-    *rdbal = PADDR(rx_desc_table);
+    *rdbal = (uint64_t)PADDR(rx_desc_table);
+
+    uint32_t* rdbah = (uint32_t*)(base_addr + E1000_RDBAH);
+    *rdbah = 0;
 
     //Length
     uint32_t* rdlen = (uint32_t*)(base_addr + E1000_RDLEN);
@@ -79,7 +100,7 @@ e1000_attach(struct pci_func* pciFunction) {
 
     //head
     uint32_t* rdh = (uint32_t*)(base_addr + E1000_RDH);
-    *rdh = 0;
+    *rdh = 1;
 
     //tail
     uint32_t* rdt = (uint32_t*)(base_addr + E1000_RDT);
@@ -87,11 +108,20 @@ e1000_attach(struct pci_func* pciFunction) {
 
     //RCTL E1000_RCTL_en | E1000_RCTL_bam | E1000_RCTL_crc
     uint32_t* rctl = (uint32_t*)(base_addr + E1000_RCTL);
-    *rctl = E1000_RCTL_EN | E1000_RCTL_BAM | E1000_RCTL_CRC;
+    *rctl = E1000_RCTL_EN | // enable receiver
+    E1000_RCTL_SZ_2048 | // set the buffer size to 2048 bytes
+    E1000_RCTL_BAM | // enable broadcast
+    E1000_RCTL_CRC; // | // strip CRC
+    // E1000_RCTL_SBP | // store bad packet
+    // E1000_RCTL_UPE | // unicast promisc enabled
+    // E1000_RCTL_MPE;  // multicast promisc enabled
 
-    for (i = 0; i < NU_DESC; i++) {
-        rx_desc_table[i].buf_addr = PADDR(rx_buf[i]);
-    }
+    // // ask e1000 for receive interrupts.
+    // uint32_t* rdtr = (uint32_t*)(base_addr + E1000_RDTR);
+    // *rdtr = 0;// interrupt after every received packet (no timer)
+    // uint32_t* radv = (uint32_t*)(base_addr + E1000_RADV);
+    // *radv = 0; // interrupt after every packet (no timer)
+    // *ims = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 
     return 1;
 }
@@ -126,8 +156,8 @@ tx_packet(char* buffer, int length) {
 int
 rx_packet(char* buffer) {
     //free head
-    static int head = 0;
     uint32_t* free_desc_addr = (uint32_t*)((char*)phy_mmio_addr + E1000_RDT);
+    int head = (*free_desc_addr == NU_DESC - 1) ? (0) : (*free_desc_addr + 1);
     //status to receive
     if (!(rx_desc_table[head].status & 0x1)) {
         // cprintf("no data received");
@@ -135,12 +165,12 @@ rx_packet(char* buffer) {
     }
     cprintf("some data received \n");
 
-    int len = rx_desc_table[head].length;
-
     //data
+    int len = rx_desc_table[head].length;
     memmove(buffer, rx_buf[head], len);
+
+    // Move rx queue head and set current status to 0
     rx_desc_table[head].status = 0;
-    head = (head + 1) % NU_DESC;
     *free_desc_addr = head;
 
     return len;

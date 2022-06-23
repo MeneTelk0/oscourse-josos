@@ -5,7 +5,7 @@
 #include <kern/e1000.h>
 #include <kern/eth.h>
 
-#define NET_LIMIT 20
+#define NET_LIMIT 2
 #define BUF_SIZE  1024
 
 void
@@ -19,16 +19,21 @@ net_serve() {
         // }
         
         char buf[BUFFER_SIZE];
-        int res = rx_packet(buf);
+        int len = rx_packet(buf);
         // struct eth_hdr hdr;
         // char data;
         // int res = eth_recv(&hdr, &data);
-        if (res > 0) {
-            cprintf("Packet contents %s \n", buf);
+        if (len > 0) {
+            cprintf("Length: %d \n", len);
+            cprintf("Received packet contents: \n");
+            for (int i = 0; i < len; i++){
+                cprintf("\\%X ", buf[i]);
+            }
+            cprintf("\n");
         }
-        if (res < 0) {
+        if (len < 0) {
             continue;
         }
-        cprintf("normal eth_recv\n");
+        // cprintf("normal eth_recv\n");
     }
 }
