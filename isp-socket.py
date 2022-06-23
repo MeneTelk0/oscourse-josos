@@ -53,7 +53,12 @@ def create_frame(src_mac, dst_mac, src_ip, dst_ip, src_udp_port, dst_udp_port, m
     udp = scapy.UDP(sport=src_udp_port, dport=dst_udp_port)
     payload = scapy.raw(message_bytes)
     whole_packet = ether / ip / udp / payload
-    # whole_packet = ether / payload
+    return scapy.raw(whole_packet)
+
+def create_arp(src_mac, psrc, pdst):
+    ether = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+    arp = scapy.ARP(psrc=psrc, pdst=pdst, hwsrc=src_mac)
+    whole_packet = ether / arp
     return scapy.raw(whole_packet)
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -91,9 +96,20 @@ try:
                                      src_udp_port=args.src_port,
                                      dst_udp_port=args.dst_port,
                                      message_bytes=data)
-                print("frame: ", frame)
+                print("ETH frame: ", frame)
                 err = sock.sendto(frame, (args.mcast_ip, args.mcast_port))
                 print("Message length: ", err)
+
+                # Send an ARP Request
+                arp = create_arp(
+                    src_mac=args.src_mac,
+                    psrc=args.src_ip,
+                    pdst=args.dst_ip
+                )
+                print("ARP frame: ", arp)
+                err = sock.sendto(arp, (args.mcast_ip, args.mcast_port))
+                print("Message length: ", err)
+
         except BlockingIOError:
             pass
 

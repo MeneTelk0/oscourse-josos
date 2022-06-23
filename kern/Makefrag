@@ -40,6 +40,7 @@ KERN_SRCFILES := kern/bootstrap.S \
 			kern/e1000.c \
 			kern/net.c \
 			kern/eth.c \
+			kern/arp.c \
 
 ifeq ($(CONFIG_KSPACE),y)
 KERN_SRCFILES += kern/alloc.c

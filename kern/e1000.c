@@ -130,8 +130,8 @@ e1000_attach(struct pci_func* pciFunction) {
 int
 tx_packet(char* buffer, int length) {
     // free head
-    static int head = 0;
     uint32_t* free_desc_addr = (uint32_t*)((char*)phy_mmio_addr + E1000_TDT);
+    int head = *free_desc_addr;
 
     //status to transmit
     if (!(tx_desc_table[head].status & 0x1)) {
@@ -147,8 +147,8 @@ tx_packet(char* buffer, int length) {
     // report status and end of packet
     tx_desc_table[head].cmd |= (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
     //next free
-    head = (head + 1) % NU_DESC;
-    *free_desc_addr = head;
+    // head = (head + 1) % NU_DESC;
+    *free_desc_addr = (head + 1) % NU_DESC;
 
     return 0;
 }
@@ -163,7 +163,6 @@ rx_packet(char* buffer) {
         // cprintf("no data received");
         return -1;
     }
-    cprintf("some data received \n");
 
     //data
     int len = rx_desc_table[head].length;

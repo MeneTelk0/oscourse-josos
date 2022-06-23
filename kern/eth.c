@@ -6,7 +6,7 @@
 #include <inc/assert.h>
 
 //52:54:00:12:34:56
-#define ETH_MAX_PACKET_SIZE 1500
+#define ETH_MAX_PACKET_SIZE 2048
 
 
 char qemu_mac[6] = {0x52, 0x54, 0x0, 0x12, 0x34, 0x56};
@@ -16,7 +16,7 @@ eth_send(struct eth_hdr* hdr, void* data, size_t len) {
     assert(len <= ETH_MAX_PACKET_SIZE - sizeof(struct eth_hdr));
     memcpy((void*)hdr->eth_smac, qemu_mac, sizeof(hdr->eth_smac));
 
-    char buf[ETH_MAX_PACKET_SIZE + 1];
+    char buf[ETH_MAX_PACKET_SIZE];
 
     hdr->eth_type = htons(hdr->eth_type);
     memcpy((void*)buf, (void*)hdr, sizeof(struct eth_hdr));
@@ -28,17 +28,10 @@ eth_send(struct eth_hdr* hdr, void* data, size_t len) {
 
 
 int
-eth_recv(struct eth_hdr* hdr, void* data) {
-    char buf[ETH_MAX_PACKET_SIZE + 1];
+eth_recv(struct eth_pkt* pkt) {
 
-    //int size = rx_packet(buf, sizeof(buf));
-    int size = rx_packet(buf);
+    int size = rx_packet((void*)pkt);
     if (size < 0) return size;
-
-    memcpy((void*)hdr, (void*)buf, sizeof(struct eth_hdr));
-    hdr->eth_type = ntohs(hdr->eth_type);
-
-    memcpy(data, (void*)buf + sizeof(struct eth_hdr), size);
 
     return size;
 }
