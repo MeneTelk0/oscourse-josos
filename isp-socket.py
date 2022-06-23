@@ -55,8 +55,8 @@ def create_frame(src_mac, dst_mac, src_ip, dst_ip, src_udp_port, dst_udp_port, m
     whole_packet = ether / ip / udp / payload
     return scapy.raw(whole_packet)
 
-def create_arp(src_mac, psrc, pdst):
-    ether = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+def create_arp(src_eth_mac, src_mac, psrc, pdst):
+    ether = scapy.Ether(src=src_eth_mac, dst="ff:ff:ff:ff:ff:ff")
     arp = scapy.ARP(psrc=psrc, pdst=pdst, hwsrc=src_mac)
     whole_packet = ether / arp
     return scapy.raw(whole_packet)
@@ -102,6 +102,7 @@ try:
 
                 # Send an ARP Request
                 arp = create_arp(
+                    src_eth_mac=args.src_mac,
                     src_mac=args.src_mac,
                     psrc=args.src_ip,
                     pdst=args.dst_ip

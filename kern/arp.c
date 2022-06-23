@@ -13,7 +13,9 @@ handle_arp_request(struct arp_hdr* arp_hdr){
 
     int cmp = memcmp(arp_hdr->target_ip, known_ip, sizeof(known_ip));
     if (cmp == 0) {
-        cprintf("    ARP: Known Address: Sending Response \n");
+        cprintf("ARP: Known Address: Sending Response \n");
+
+        // Construct ARP header
         struct arp_hdr arp_reply_hdr;
         arp_reply_hdr.htype = arp_hdr->htype;
         arp_reply_hdr.ptype = arp_hdr->ptype;
@@ -25,13 +27,15 @@ handle_arp_request(struct arp_hdr* arp_hdr){
         memcpy(arp_reply_hdr.sender_ip, known_ip, sizeof(known_ip));
         memcpy(arp_reply_hdr.sender_mac, local_mac, sizeof(local_mac));
 
+        // Construct Ethernet header
         struct eth_hdr e_hdr;
         e_hdr.eth_type = ETH_TYPE_ARP;
         memcpy(e_hdr.eth_dmac, arp_reply_hdr.target_mac, sizeof(arp_reply_hdr.target_mac));
 
+        // Transmit the packet
         return eth_send(&e_hdr, &arp_reply_hdr, sizeof(struct arp_hdr));
     } else {
-        cprintf("    ARP: Ignoring Request: Unknown Address");
+        cprintf("ARP: Ignoring Request: Unknown Address");
         return 0;
     }
 
@@ -43,27 +47,27 @@ arp_recv(struct eth_pkt* eth_pkt) {
     struct arp_hdr arp_hdr;
     memcpy(&arp_hdr, eth_pkt->data, sizeof(struct arp_hdr));
 
-    cprintf("    ARP: Opcode: %x\n", arp_hdr.opcode);
+    cprintf("ARP: Opcode: %x\n", arp_hdr.opcode);
 
-    cprintf("    ARP: Sender MAC: ");
+    cprintf("ARP: Sender MAC: ");
     for (int i=0; i < 6; i++){
         cprintf("\\%x ", arp_hdr.sender_mac[i]);
     }
     cprintf("\n");
 
-    cprintf("    ARP: Sender IP: ");
+    cprintf("ARP: Sender IP: ");
     for (int i=0; i < 4; i++){
         cprintf("%d.", arp_hdr.sender_ip[i]);
     }
     cprintf("\n");
 
-    cprintf("    ARP: Target MAC: ");
+    cprintf("ARP: Target MAC: ");
     for (int i=0; i < 6; i++){
         cprintf("\\%x ", arp_hdr.target_mac[i]);
     }
     cprintf("\n");
 
-    cprintf("    ARP: Target IP: ");
+    cprintf("ARP: Target IP: ");
     for (int i=0; i < 4; i++){
         cprintf("%d.", arp_hdr.target_ip[i]);
     }
@@ -71,11 +75,11 @@ arp_recv(struct eth_pkt* eth_pkt) {
 
     switch (arp_hdr.opcode){
     case ARP_OP_REQUEST:
-        cprintf("    ARP: Opcode Request\n");
+        cprintf("ARP: Opcode Request\n");
         handle_arp_request(&arp_hdr);
         break;
     default:
-        cprintf("    ARP: Unknown Opcode\n");
+        cprintf("ARP: Unknown Opcode\n");
         break;
     }
 

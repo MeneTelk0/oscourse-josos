@@ -5,6 +5,8 @@
 #include <kern/e1000.h>
 #include <kern/eth.h>
 #include <kern/arp.h>
+#include <kern/ip.h>
+#include <kern/udp.h>
 
 #define NET_LIMIT 1
 #define BUF_SIZE  1024
@@ -17,15 +19,15 @@ net_serve() {
 
         if (len > 0) {
             cprintf("\nNew ETH packet received: \n");
-            cprintf("  Length: %d \n", len);
+            cprintf("Length: %d \n", len);
 
-            cprintf("  Eth: Dst MAC: ");
+            cprintf("Eth: Dst MAC: ");
             for (int i=0; i < 6; i++){
                 cprintf("\\%x ", pkt.hdr.eth_dmac[i]);
             }
             cprintf("\n");
 
-            cprintf("  Eth: Src MAC: ");
+            cprintf("Eth: Src MAC: ");
             for (int i=0; i < 6; i++){
                 cprintf("\\%x ", pkt.hdr.eth_smac[i]);
             }
@@ -33,17 +35,29 @@ net_serve() {
 
             switch (pkt.hdr.eth_type){
             case ETH_TYPE_IPV4:
-                cprintf("  Eth: Type IPv4\n");
+                cprintf("Eth: Type IPv4\n");
+                ip_recv(&pkt, len);
                 break;
             case ETH_TYPE_ARP:
-                cprintf("  Eth: Type ARP\n");
+                cprintf("Eth: Type ARP\n");
                 arp_recv(&pkt);
                 break;
             default:
-                cprintf("  Eth: Type Unknown: %x\n", pkt.hdr.eth_type);
+                cprintf("Eth: Type Unknown: %x\n", pkt.hdr.eth_type);
             }
         } else {
             continue;
         }
+    }
+    for (size_t i = 0; i < 1; ++i) {
+        char buf[6];
+        memset(buf, 0xEE, 6);
+        int res = udp_send(buf, 6);
+        if (res < 0) {
+            //cprintf("error in eth_send\n");
+            //cprintf("%d\n", res);
+            continue;
+        }
+
     }
 }
