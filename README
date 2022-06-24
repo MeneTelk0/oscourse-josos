@@ -1,3 +1,7 @@
+Индивидуальное задание: реализовать поддержку сетевого стека в JOS.
+
+Более детальную формулировку и описание системы см. в Design_oscourse_2022.pdf
+
 This branch contains vastly improoved kernel memory
 subsystem with following new features:
     * 2M/1G pages
